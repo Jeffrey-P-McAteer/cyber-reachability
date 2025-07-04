@@ -1,0 +1,25 @@
+[package]
+name = "cyber-reachability"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# General purpose executors + data structures
+tokio = {version = "1.28", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.7"
+
+# Data-collection capabilities
+hw-crossplatform = "=0.1.28"
+sysinfo = "0.35"
+
+
+
+[profile.release]
+strip = true
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+target-cpu = "native"
+
