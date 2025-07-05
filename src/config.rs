@@ -4,11 +4,28 @@ use serde::{Serialize, Deserialize};
 
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Config {
-  //#[serde(default = "empty_string")]
-  pub boot_iso_url: String,
-  pub boot_iso: std::path::PathBuf,
+#[serde(rename_all = "lowercase")]
+pub enum Config {
+  Ssh(ConfigSsh)
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub struct ConfigSsh {
+  pub hostname: String,
+
+  #[serde(default = "default_port_22")]
+  pub port: u32,
+
+  pub username: String,
+
+  #[serde(default = "default_empty_string")]
+  pub password: String,
+
+  #[serde(default = "default_empty_string")]
+  pub key_file: String,
+}
+
 
 pub fn read_all_config(dir: &std::path::Path) -> Vec<Config> {
   let mut c = Vec::with_capacity(32);
@@ -45,3 +62,9 @@ pub fn read_all_config(dir: &std::path::Path) -> Vec<Config> {
   }
   c
 }
+
+
+fn default_port_22() -> u32 { 22 }
+
+fn default_empty_string() -> String { "".into() }
+
