@@ -9,6 +9,7 @@ pub enum DiscoveryTechnique {
   UDPPortScan,
 }
 
+
 #[derive(Debug)]
 pub struct ScanEntity {
   pub parent: Option<Box<ScanEntity>>,
@@ -32,8 +33,17 @@ impl ScanEntity {
 
   }
 
+  pub fn print_tree(&self, prefix: &str) {
+    println!("{} {:?} {}", prefix, self.discovery_technique, self.hardware_description);
+    let child_prefix = format!("{}>", prefix);
+    for neighbor in &self.neighbors {
+      neighbor.print_tree(&child_prefix);
+    }
+  }
+
 }
 
+//pub fn read_thi
 
 pub fn read_this_machine_hw_description() -> String {
   multiline_to_one_line(

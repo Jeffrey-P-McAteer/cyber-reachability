@@ -13,7 +13,8 @@ fn main() {
     e.scan(&c);
 
     // TODO report stuff
-    eprintln!("{:?}", e);
+    //eprintln!("{:?}", e);
+    e.print_tree(">");
 }
 
 
