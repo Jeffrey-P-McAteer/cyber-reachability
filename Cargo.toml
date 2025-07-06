@@ -12,6 +12,7 @@ clap =  { version = "4.5",  features = ["derive"] }
 
 # Data-collection capabilities
 network-interface = { version = "2.0.1" }
+ipnet = { version = "2.11" }
 
 
 [profile.release]

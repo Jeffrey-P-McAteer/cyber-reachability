@@ -51,7 +51,24 @@ impl ScanEntity {
 
   fn scan_iface(&mut self, iface: &network_interface::NetworkInterface, args: &crate::args::Args, configs: &[crate::config::Config]) {
     args.maybe_log(2, || { eprintln!("iface = {:?}", iface);});
-
+    for addr in iface.addr.iter() {
+      match addr {
+        network_interface::Addr::V4(v4_addr) => {
+          if v4_addr.ip.is_loopback() {
+            return; // Uninteresting, do not scan self
+          }
+          let net = ipnet::Ipv4Net::with_netmask(v4_addr.ip, v4_addr.netmask.unwrap_or(std::net::Ipv4Addr::UNSPECIFIED)); // UNSPECIFIED is 0.0.0.0 or a /32 range
+          args.maybe_log(2, || { eprintln!("v4 net = {:?}", net);});
+        }
+        network_interface::Addr::V6(v6_addr) => {
+          if v6_addr.ip.is_loopback() {
+            return; // Uninteresting, do not scan self
+          }
+          let net = ipnet::Ipv6Net::with_netmask(v6_addr.ip, v6_addr.netmask.unwrap_or(std::net::Ipv6Addr::UNSPECIFIED)); // UNSPECIFIED is zeroes
+          args.maybe_log(2, || { eprintln!("v6 net = {:?}", net);});
+        }
+      }
+    }
   }
 
   pub fn print_tree(&self, prefix: &str) {
