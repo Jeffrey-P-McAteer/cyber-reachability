@@ -10,7 +10,7 @@ fn main() {
     let c = config::read_all_config(&a.config_folder);
     a.maybe_log(1, || { eprintln!("c = {:?}", c);});
     let mut e = scan::ScanEntity::this_machine();
-    e.scan(&c);
+    e.scan(&a, &c);
 
     // TODO report stuff
     //eprintln!("{:?}", e);

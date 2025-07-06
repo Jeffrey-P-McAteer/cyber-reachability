@@ -32,13 +32,13 @@ impl ScanEntity {
     }
   }
 
-  pub fn scan(&mut self, configs: &[crate::config::Config]) {
+  pub fn scan(&mut self, args: &crate::args::Args, configs: &[crate::config::Config]) {
     use network_interface::NetworkInterface;
     use network_interface::NetworkInterfaceConfig;
     match network_interface::NetworkInterface::show() {
       Ok(network_ifaces) => {
         for iface in network_ifaces {
-          self.scan_iface(&iface, configs);
+          self.scan_iface(&iface, args, configs);
         }
       }
       Err(e) => {
@@ -49,8 +49,9 @@ impl ScanEntity {
 
   }
 
-  fn scan_iface(&mut self, iface: &network_interface::NetworkInterface, configs: &[crate::config::Config]) {
-    eprintln!("{:?}", iface);
+  fn scan_iface(&mut self, iface: &network_interface::NetworkInterface, args: &crate::args::Args, configs: &[crate::config::Config]) {
+    args.maybe_log(2, || { eprintln!("iface = {:?}", iface);});
+
   }
 
   pub fn print_tree(&self, prefix: &str) {
