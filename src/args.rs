@@ -30,7 +30,7 @@ pub fn parse_cli_args() -> Args {
 
 impl Args {
   pub fn maybe_log(&self, level: u8, msg_fn: impl FnOnce() -> () ) {
-    if self.verbosity > level {
+    if self.verbosity >= level {
       msg_fn();
     }
   }

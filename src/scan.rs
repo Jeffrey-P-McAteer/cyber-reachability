@@ -20,6 +20,7 @@ pub struct ScanEntity {
   pub neighbors: Vec<ScanEntity>,
   pub discovery_technique: DiscoveryTechnique,
   pub hardware_description: String,
+  pub report_lines: Vec<String>,
 }
 
 impl ScanEntity {
@@ -29,6 +30,7 @@ impl ScanEntity {
       neighbors: Vec::with_capacity(16),
       discovery_technique: DiscoveryTechnique::ThisMachine,
       hardware_description: read_this_machine_hw_description(),
+      report_lines: Vec::with_capacity(16),
     }
   }
 
@@ -49,8 +51,12 @@ impl ScanEntity {
 
   }
 
+  fn report_line(&mut self, msg_fn: impl FnOnce() -> String ) {
+    self.report_lines.push(msg_fn());
+  }
+
   fn scan_iface(&mut self, iface: &network_interface::NetworkInterface, args: &crate::args::Args, configs: &[crate::config::Config]) {
-    args.maybe_log(2, || { eprintln!("iface = {:?}", iface);});
+    args.maybe_log(3, || { eprintln!("iface = {:?}", iface);});
     for addr in iface.addr.iter() {
       match addr {
         network_interface::Addr::V4(v4_addr) => {
@@ -59,6 +65,7 @@ impl ScanEntity {
           }
           let net = ipnet::Ipv4Net::with_netmask(v4_addr.ip, v4_addr.netmask.unwrap_or(std::net::Ipv4Addr::UNSPECIFIED)); // UNSPECIFIED is 0.0.0.0 or a /32 range
           args.maybe_log(2, || { eprintln!("v4 net = {:?}", net);});
+          self.report_line(|| { format!("{:?}", net) });
         }
         network_interface::Addr::V6(v6_addr) => {
           if v6_addr.ip.is_loopback() {
@@ -73,6 +80,9 @@ impl ScanEntity {
 
   pub fn print_tree(&self, prefix: &str) {
     println!("{} {:?} {}", prefix, self.discovery_technique, self.hardware_description);
+    for report_line in self.report_lines.iter() {
+      println!("{}   {}", prefix, report_line);
+    }
     let child_prefix = format!("{}>", prefix);
     for neighbor in &self.neighbors {
       neighbor.print_tree(&child_prefix);
