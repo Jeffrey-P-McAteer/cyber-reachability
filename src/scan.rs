@@ -1,4 +1,8 @@
 
+// We're in R&D land, silence these errors
+#![allow(unused_imports,dead_code,unused_variables)]
+
+
 #[allow(non_camel_case_types)]
 #[derive(Debug)]
 pub enum DiscoveryTechnique {
@@ -34,7 +38,7 @@ impl ScanEntity {
     match network_interface::NetworkInterface::show() {
       Ok(network_ifaces) => {
         for iface in network_ifaces {
-          self.scan_iface(&iface);
+          self.scan_iface(&iface, configs);
         }
       }
       Err(e) => {
@@ -45,7 +49,7 @@ impl ScanEntity {
 
   }
 
-  fn scan_iface(&mut self, iface: &network_interface::NetworkInterface) {
+  fn scan_iface(&mut self, iface: &network_interface::NetworkInterface, configs: &[crate::config::Config]) {
     eprintln!("{:?}", iface);
   }
 

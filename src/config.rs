@@ -3,10 +3,20 @@
 use serde::{Serialize, Deserialize};
 
 
+#[allow(non_camel_case_types)]
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Config {
+  Local_Tools(ConfigLocalTools),
   Ssh(ConfigSsh)
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub struct ConfigLocalTools {
+  pub linux_x86_64_bin: std::path::PathBuf,
+  pub windows_x86_64_bin: std::path::PathBuf,
+  pub macos_x86_64_bin: std::path::PathBuf,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -29,6 +39,7 @@ pub struct ConfigSsh {
 
 pub fn read_all_config(dir: &std::path::Path) -> Vec<Config> {
   let mut c = Vec::with_capacity(32);
+  let mut error_occurred = false;
   match std::fs::read_dir(dir) {
     Ok(read_dir) => {
       for entry in read_dir {
@@ -42,21 +53,32 @@ pub fn read_all_config(dir: &std::path::Path) -> Vec<Config> {
                   }
                   Err(e) => {
                     eprintln!("{:?} {:?}", entry.path(), e);
+                    error_occurred = true;
                   }
                 }
               }
               Err(e) => {
                 eprintln!("{:?}", e);
+                error_occurred = true;
               }
             }
           }
           Err(e) => {
             eprintln!("{:?}", e);
+            error_occurred = true;
           }
         }
       }
     }
     Err(e) => {
+      eprintln!("{:?}", e);
+      error_occurred = true;
+    }
+  }
+  if error_occurred {
+    eprintln!("Pausing because an error occurred, press enter to continue with partial configuration...");
+    let mut line = String::new();
+    if let Err(e) = std::io::stdin().read_line(&mut line) {
       eprintln!("{:?}", e);
     }
   }
