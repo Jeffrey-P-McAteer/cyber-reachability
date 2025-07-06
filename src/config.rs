@@ -39,6 +39,7 @@ pub struct ConfigSsh {
 
 pub fn read_all_config(dir: &std::path::Path) -> Vec<Config> {
   let mut c = Vec::with_capacity(32);
+  let mut c_source_files = Vec::with_capacity(32);
   let mut error_occurred = false;
   match std::fs::read_dir(dir) {
     Ok(read_dir) => {
@@ -50,6 +51,7 @@ pub fn read_all_config(dir: &std::path::Path) -> Vec<Config> {
                 match toml::from_str::<Config>(&entry_content) {
                   Ok(parsed_config) => {
                     c.push(parsed_config);
+                    c_source_files.push(entry.path().clone());
                   }
                   Err(e) => {
                     eprintln!("{:?} {:?}", entry.path(), e);
@@ -75,6 +77,12 @@ pub fn read_all_config(dir: &std::path::Path) -> Vec<Config> {
       error_occurred = true;
     }
   }
+  for (config_struct, config_source_file) in c.iter().zip(c_source_files.iter()) {
+    if let Err(e) = config_struct.check_config() {
+      eprintln!("From {:?} {}", config_source_file, e);
+      error_occurred = true;
+    }
+  }
   if error_occurred {
     eprintln!("Pausing because an error occurred, press enter to continue with partial configuration...");
     let mut line = String::new();
@@ -90,3 +98,26 @@ fn default_port_22() -> u32 { 22 }
 
 fn default_empty_string() -> String { "".into() }
 
+
+impl Config {
+  pub fn check_config(&self) -> Result<(), Box<dyn std::error::Error>> {
+    match self {
+      Config::Local_Tools(tools_config) => {
+        for bin in &[&tools_config.linux_x86_64_bin, &tools_config.windows_x86_64_bin, &tools_config.macos_x86_64_bin] {
+          if !bin.exists() {
+            return Err(format!("Error: {:?} does not exist!", tools_config.linux_x86_64_bin).into());
+          }
+        }
+      }
+      Config::Ssh(ssh_config) => {
+        if ssh_config.key_file.len() > 0 && !std::path::PathBuf::from(ssh_config.key_file.clone()).exists() {
+          return Err(format!("Error: {:?} does not exist!", ssh_config.key_file).into());
+        }
+        if ssh_config.key_file.len() <= 0 && ssh_config.password.len() <= 0 {
+          return Err(format!("Error: [ssh] block MUST specify either a key_file or a password, cannot leave both blank").into());
+        }
+      }
+    }
+    Ok(())
+  }
+}

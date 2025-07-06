@@ -21,6 +21,16 @@ if not shutil.which('cargo-zigbuild'):
     'cargo', 'install', '--locked', 'cargo-zigbuild'
   ], check=True)
 
+def find_target_binary(t):
+  canidates = [
+    os.path.join('target', t, 'release', 'cyber-reachability.exe'),
+    os.path.join('target', t, 'release', 'cyber-reachability'),
+  ]
+  for c in canidates:
+    if os.path.exists(c):
+      return c
+  raise Exception(f'Cannot find a binary for {t}')
+
 targets = [
   'x86_64-pc-windows-gnu',
   'x86_64-unknown-linux-gnu',
@@ -37,6 +47,8 @@ for t in targets:
   subprocess.run([
     'cargo', 'zigbuild', '--release', '--target', f'{t}'
   ], check=True)
+  out_bin_path = os.path.abspath(find_target_binary(t))
+  print(f'[ Built ] {out_bin_path}')
 
 
 
