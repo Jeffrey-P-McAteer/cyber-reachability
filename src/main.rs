@@ -10,7 +10,16 @@ fn main() {
     let c = config::read_all_config(&a.config_folder);
     a.maybe_log(1, || { eprintln!("c = {:?}", c);});
     let mut e = scan::ScanEntity::this_machine();
-    e.scan(&a, &c);
+
+    // Setup a tokio runtime for the scan
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .worker_threads(12)
+        .build()
+        .expect("Failed to build Tokio runtime");
+
+    // Run the scan async
+    rt.block_on(e.scan(&a, &c));
 
     // TODO report stuff
     //eprintln!("{:?}", e);

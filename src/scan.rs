@@ -34,13 +34,13 @@ impl ScanEntity {
     }
   }
 
-  pub fn scan(&mut self, args: &crate::args::Args, configs: &[crate::config::Config]) {
+  pub async fn scan(&mut self, args: &crate::args::Args, configs: &[crate::config::Config]) {
     use network_interface::NetworkInterface;
     use network_interface::NetworkInterfaceConfig;
     match network_interface::NetworkInterface::show() {
       Ok(network_ifaces) => {
         for iface in network_ifaces {
-          self.scan_iface(&iface, args, configs);
+          self.scan_iface(&iface, args, configs).await;
         }
       }
       Err(e) => {
@@ -55,7 +55,7 @@ impl ScanEntity {
     self.report_lines.push(msg_fn());
   }
 
-  fn scan_iface(&mut self, iface: &network_interface::NetworkInterface, args: &crate::args::Args, configs: &[crate::config::Config]) {
+  async fn scan_iface(&mut self, iface: &network_interface::NetworkInterface, args: &crate::args::Args, configs: &[crate::config::Config]) {
     args.maybe_log(3, || { eprintln!("iface = {:?}", iface);});
     for addr in iface.addr.iter() {
       match addr {
@@ -65,8 +65,7 @@ impl ScanEntity {
           }
           if let Ok(net) = ipnet::Ipv4Net::with_netmask(v4_addr.ip, v4_addr.netmask.unwrap_or(std::net::Ipv4Addr::UNSPECIFIED)) { // UNSPECIFIED is 0.0.0.0 or a /32 range
             //args.maybe_log(2, || { eprintln!("v4 net = {:?}", net);});
-            self.report_line(|| { format!("{:?}", net) });
-
+            self.scan_iface_ipv4_net(iface, &net, args, configs).await;
           }
         }
         network_interface::Addr::V6(v6_addr) => {
@@ -81,10 +80,35 @@ impl ScanEntity {
     }
   }
 
+  async fn scan_iface_ipv4_net(&mut self, iface: &network_interface::NetworkInterface, net: &ipnet::Ipv4Net, args: &crate::args::Args, configs: &[crate::config::Config]) {
+      let num_hosts = hosts_from_prefix_v4(net.prefix_len());
+
+      let mut ping_jobs = Vec::with_capacity(num_hosts as usize);
+      for host_v4 in net.hosts() {
+        ping_jobs.push(tokio::task::spawn(async move {
+          let ping_timeout = std::time::Duration::from_secs(4);
+          let data = [1,2,3,4];  // ping data
+          let data_arc = std::sync::Arc::new(&data[..]);
+          let options = ping_rs::PingOptions { ttl: 128, dont_fragment: true };
+          ping_rs::send_ping_async(&std::net::IpAddr::V4(host_v4), ping_timeout, data_arc, Some(&options) ).await
+        }));
+      }
+
+      let results = futures::future::join_all(ping_jobs).await;
+      let mut online_hosts = Vec::with_capacity(32);
+      for (i, result) in results.into_iter().enumerate() {
+        if let Ok(Ok(result)) = result {
+          online_hosts.push(result.address);
+        }
+      }
+
+      self.report_line(|| { format!("{:?} with {} hosts, {} are online: {:?}", net, num_hosts, online_hosts.len(), online_hosts) });
+  }
+
   pub fn print_tree(&self, prefix: &str) {
     println!("{} {:?} {}", prefix, self.discovery_technique, self.hardware_description);
     for report_line in self.report_lines.iter() {
-      println!("{}   {}", prefix, report_line);
+      println!("{}  {}", prefix, report_line);
     }
     let child_prefix = format!("{}>", prefix);
     for neighbor in &self.neighbors {
@@ -169,5 +193,24 @@ pub fn run_shell_cmd_output<S: AsRef<std::ffi::OsStr>>(cmd: S) -> String {
 #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
 pub fn run_shell_cmd_output<S: AsRef<std::ffi::OsStr>>(cmd: S) -> String {
   format!("Target OS is unsupported!")
+}
+
+fn hosts_from_prefix_v4(prefix_len: u8) -> u32 {
+    if prefix_len > 32 {
+        panic!("Ought never occur, prefix_len > 32 for ipv4")
+    }
+
+    let mut total_addresses = 1u32;
+    for _ in 0..(32 - prefix_len) {
+        total_addresses *= 2;
+    }
+
+    let usable_hosts = match 32 - prefix_len {
+        0 => 1,            // /32
+        1 => 2,            // /31
+        _ => total_addresses - 2, // subtract network + broadcast
+    };
+
+    usable_hosts
 }
 
