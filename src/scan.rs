@@ -86,7 +86,7 @@ impl ScanEntity {
       let mut online_hosts = std::collections::HashSet::with_capacity(32);
 
       { // Stragety 1: ICMP Ping Replies!
-        const MAX_PINGS_PER_SECOND: usize = 4096;
+        const MAX_PINGS_PER_SECOND: usize = 64;
 
         let mut ping_jobs = Vec::new();
         if num_hosts > 65534 {
@@ -128,7 +128,7 @@ impl ScanEntity {
       }
 
       { // Strategy 2: TCP Replies on common ports!
-        const MAX_TCP_CONNS_PER_SECOND: usize = 8096; // 16384
+        const MAX_TCP_CONNS_PER_SECOND: usize = 512; // 16384
 
         let mut tcp_jobs = Vec::new();
         if num_hosts > 65534 {
