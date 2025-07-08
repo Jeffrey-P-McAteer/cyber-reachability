@@ -83,22 +83,89 @@ impl ScanEntity {
   async fn scan_iface_ipv4_net(&mut self, iface: &network_interface::NetworkInterface, net: &ipnet::Ipv4Net, args: &crate::args::Args, configs: &[crate::config::Config]) {
       let num_hosts = hosts_from_prefix_v4(net.prefix_len());
 
-      let mut ping_jobs = Vec::with_capacity(num_hosts as usize);
-      for host_v4 in net.hosts() {
-        ping_jobs.push(tokio::task::spawn(async move {
-          let ping_timeout = std::time::Duration::from_secs(4);
-          let data = [1,2,3,4,5,6,7,8]; // ping data
-          let data_arc = std::sync::Arc::new(&data[..]);
-          let options = ping_rs::PingOptions { ttl: 128, dont_fragment: false };
-          ping_rs::send_ping_async(&std::net::IpAddr::V4(host_v4), ping_timeout, data_arc, Some(&options) ).await
-        }));
+      let mut online_hosts = std::collections::HashSet::with_capacity(32);
+
+      { // Stragety 1: ICMP Ping Replies!
+        const MAX_PINGS_PER_SECOND: usize = 4096;
+
+        let mut ping_jobs = Vec::new();
+        if num_hosts > 65534 {
+          args.maybe_log(2, || { eprintln!("Refusing to ping-scan network {} with {} hosts as this will take too much time.", net, num_hosts); });
+        }
+        else {
+          ping_jobs.reserve(num_hosts as usize);
+          for (host_num, host_v4) in net.hosts().enumerate() {
+            let ping_delay_ms = ((host_num as f64 / MAX_PINGS_PER_SECOND as f64) * 1000.0 as f64) as u64;
+            let ping_wait_s = (((num_hosts as f64 / MAX_PINGS_PER_SECOND as f64) + 1.0) * 1.1) as u64;
+            ping_jobs.push(tokio::task::spawn(async move {
+              tokio::time::sleep(tokio::time::Duration::from_millis(ping_delay_ms)).await; // prevent flooding a network
+              let ping_timeout = std::time::Duration::from_secs(ping_wait_s);
+              let data = [1,2,3,4,5,6,7,8]; // ping data
+              let data_arc = std::sync::Arc::new(&data[..]);
+              let options = ping_rs::PingOptions { ttl: 128, dont_fragment: true };
+              ping_rs::send_ping_async(&std::net::IpAddr::V4(host_v4), ping_timeout, data_arc, Some(&options) ).await
+            }));
+          }
+          // Works fine for isolated hosts and roughly <256 ips; ugh.
+          /*
+          tokio::time::sleep(tokio::time::Duration::from_millis(4800)).await;
+          ping_jobs.push(tokio::task::spawn(async move {
+            let ping_timeout = std::time::Duration::from_secs(4);
+            let data = [1,2,3,4,5,6,7,8]; // ping data
+            let data_arc = std::sync::Arc::new(&data[..]);
+            let options = ping_rs::PingOptions { ttl: 128, dont_fragment: false };
+            ping_rs::send_ping_async(&std::net::IpAddr::V4(std::net::Ipv4Addr::new(169, 254, 100, 20)), ping_timeout, data_arc, Some(&options) ).await
+          }));
+          */
+        }
+
+        let ping_results = futures::future::join_all(ping_jobs).await;
+        for (i, ping_result) in ping_results.into_iter().enumerate() {
+          if let Ok(Ok(ping_result)) = ping_result {
+            online_hosts.insert(ping_result.address);
+          }
+        }
       }
 
-      let results = futures::future::join_all(ping_jobs).await;
-      let mut online_hosts = Vec::with_capacity(32);
-      for (i, result) in results.into_iter().enumerate() {
-        if let Ok(Ok(result)) = result {
-          online_hosts.push(result.address);
+      { // Strategy 2: TCP Replies on common ports!
+        const MAX_TCP_CONNS_PER_SECOND: usize = 8096; // 16384
+
+        let mut tcp_jobs = Vec::new();
+        if num_hosts > 65534 {
+          args.maybe_log(2, || { eprintln!("Refusing to tcp-scan network {} with {} hosts as this will take too much time.", net, num_hosts); });
+        }
+        else {
+          const PORTS_TO_SCAN: &[u16] = &[
+            22, 80, 443
+          ];
+          tcp_jobs.reserve(num_hosts as usize * PORTS_TO_SCAN.len());
+          for port in PORTS_TO_SCAN {
+            for (host_num, host_v4) in net.hosts().enumerate() {
+              let tcp_delay_ms = ((host_num as f64 / MAX_TCP_CONNS_PER_SECOND as f64) * 1000.0 as f64) as u64;
+              let tcp_wait_s = (((num_hosts as f64 / MAX_TCP_CONNS_PER_SECOND as f64) + 1.0) * 1.1) as u64;
+              tcp_jobs.push(tokio::task::spawn(async move {
+                tokio::time::sleep(tokio::time::Duration::from_millis(tcp_delay_ms)).await; // prevent flooding a network
+                let result = tokio::time::timeout(
+                  tokio::time::Duration::from_secs(tcp_wait_s),
+                  tokio::net::TcpStream::connect((std::net::IpAddr::V4(host_v4), *port))
+                ).await;
+                match result {
+                    Ok(Ok(_stream)) => (host_v4, port, true), // Connected successfully
+                    _ => (host_v4, port, false),              // Timeout or connection failed
+                }
+              }));
+            }
+          }
+        }
+
+        let tcp_results = futures::future::join_all(tcp_jobs).await;
+        for (i, tcp_result) in tcp_results.into_iter().enumerate() {
+          if let Ok((host_v4, port, success)) = tcp_result {
+            if success {
+              online_hosts.insert(std::net::IpAddr::V4(host_v4));
+              args.maybe_log(2, || { eprintln!("{} is listening on {}", host_v4, port); });
+            }
+          }
         }
       }
 
