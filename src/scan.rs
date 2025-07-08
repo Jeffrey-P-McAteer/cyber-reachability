@@ -87,9 +87,9 @@ impl ScanEntity {
       for host_v4 in net.hosts() {
         ping_jobs.push(tokio::task::spawn(async move {
           let ping_timeout = std::time::Duration::from_secs(4);
-          let data = [1,2,3,4];  // ping data
+          let data = [1,2,3,4,5,6,7,8]; // ping data
           let data_arc = std::sync::Arc::new(&data[..]);
-          let options = ping_rs::PingOptions { ttl: 128, dont_fragment: true };
+          let options = ping_rs::PingOptions { ttl: 128, dont_fragment: false };
           ping_rs::send_ping_async(&std::net::IpAddr::V4(host_v4), ping_timeout, data_arc, Some(&options) ).await
         }));
       }
